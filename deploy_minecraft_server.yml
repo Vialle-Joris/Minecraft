@@ -8,9 +8,9 @@
       prompt: "Quelle adresse IP souhaitez-vous utiliser pour le fichier hosts ?"
       private: no
     - name: "project_path"
-      prompt: "Chemin absolu où est situé votre répertoire SAE5.02 (se termine par /SAE5.02/) ?"
+      prompt: "Chemin absolu où est situé votre répertoire Minecraft (se termine par /Minecraft/) ?"
       private: no
-      default: "~/SAE5.02"
+      default: "~/Minecraft"
   tasks:
     # Normalisation du chemin du projet
     - name: Expander le chemin utilisateur (~) dans project_path
