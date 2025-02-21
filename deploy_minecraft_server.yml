@@ -1,0 +1,138 @@
+---
+- name: Déploiement complet d'un serveur Minecraft Forge
+  hosts: localhost
+  become: yes
+  become_method: sudo
+  vars_prompt:
+    - name: "server_ip"
+      prompt: "Quelle adresse IP souhaitez-vous utiliser pour le fichier hosts ?"
+      private: no
+    - name: "project_path"
+      prompt: "Chemin absolu où est situé votre répertoire SAE5.02 (se termine par /SAE5.02/) ?"
+      private: no
+      default: "~/SAE5.02"
+  tasks:
+    # Normalisation du chemin du projet
+    - name: Expander le chemin utilisateur (~) dans project_path
+      set_fact:
+        project_path_expanded: "{{ project_path | expanduser }}"
+
+    # Création de l'arborescence
+    - name: Création des répertoires pour Ansible, Docker et leur contenu
+      file:
+        path: "{{ project_path_expanded }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - 'ansible/playbooks'
+        - 'ansible/roles'
+        - 'ansible/inventory'
+        - 'docker/configs'
+        - 'docker/mods'
+        - 'docker/worlds'
+
+    - name: Créer des fichiers README dans les répertoires
+      copy:
+        content: "# Documentation"
+        dest: "{{ project_path_expanded }}/{{ item }}"
+        mode: '0644'
+      with_items:
+        - 'ansible/playbooks/README.md'
+        - 'ansible/roles/README.md'
+        - 'ansible/inventory/README.md'
+        - 'docker/configs/README.md'
+        - 'docker/mods/README.md'
+        - 'docker/worlds/README.md'
+
+    # Création du fichier d'inventaire pour Ansible
+    - name: Création du fichier d'inventaire pour Ansible
+      copy:
+        content: |
+          [serveur_ubuntu]
+          {{ server_ip }} ansible_ssh_user=joris ansible_ssh_pass=Sterling7mc ansible_become_pass=Sterling7mc
+
+          [minecraft_server]
+          {{ server_ip }} ansible_ssh_user=joris ansible_ssh_pass=Sterling7mc ansible_become_pass=Sterling7mc
+        dest: "{{ project_path_expanded }}/ansible/inventory/hosts"
+        mode: '0644'
+
+    # Création du fichier server.properties
+    - name: Création du fichier server.properties
+      copy:
+        content: |
+          # Minecraft server properties
+          # Updated for SAE5.02
+
+          allow-flight=false
+          allow-nether=true
+          difficulty=normal
+          enable-command-block=true
+          gamemode=survival
+          generate-structures=true
+          level-name=SAE5.02
+          max-players=20
+          motd=Bienvenue sur le serveur SAE5.02 !\nRejoignez-nous pour une aventure unique.
+          online-mode=false
+          pvp=true
+          server-port=25565
+          view-distance=12
+          simulation-distance=10
+          spawn-animals=true
+          spawn-monsters=true
+          spawn-npcs=true
+          enable-rcon=true
+          rcon.password=19fe8672f3067dc8c29761b1
+          rcon.port=25575
+        dest: "{{ project_path_expanded }}/docker/configs/server.properties"
+        mode: '0644'
+
+    # Déplacement des fichiers .jar vers le répertoire des mods
+    - name: Déplacer les fichiers .jar vers le répertoire des mods
+      shell: mv {{ project_path_expanded }}/*.jar {{ project_path_expanded }}/docker/mods/
+      args:
+        removes: "{{ project_path_expanded }}/*.jar"
+
+    # Création du fichier docker-compose.yml
+    - name: Création du fichier docker-compose.yml
+      copy:
+        content: |
+          version: "3.8"
+          services:
+            minecraft:
+              image: itzg/minecraft-server
+              container_name: minecraft_server
+              ports:
+                - "25565:25565"
+              environment:
+                EULA: "TRUE"
+                TYPE: "FORGE"
+                VERSION: "1.20.1"
+                FORGEVERSION: "47.3.12"
+                DIFFICULTY: "normal"
+                ONLINE_MODE: "FALSE"
+              volumes:
+                - ./configs:/data
+                - ./mods:/mods
+                - ./worlds:/world
+              restart: unless-stopped
+        dest: "{{ project_path_expanded }}/docker/docker-compose.yml"
+        mode: '0644'
+
+    # Lancement du serveur Docker
+    - name: Lancer le serveur Minecraft avec Docker Compose
+      command: docker-compose up -d
+      args:
+        chdir: "{{ project_path_expanded }}/docker"
+
+    # Déploiement des mods via Ansible
+    - name: Déploiement des mods sur le serveur Minecraft
+      copy:
+        src: "{{ project_path_expanded }}/docker/mods/"
+        dest: "/home/joris/minecraft-server/mods/"
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: no
+
+    - name: Redémarrer le serveur Minecraft Docker pour appliquer les mods
+      command: docker restart minecraft_server
